@@ -1,0 +1,123 @@
+from transformers import BartTokenizer, BartForConditionalGeneration
+from langchain_community.llms import OpenAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
+import faiss
+import numpy as np
+
+# Force the model to run on CPU
+device = 'cpu'
+
+# Initialize the tokenizer and model for sequence generation (using BART model)
+tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
+generator_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large").to(device)
+
+# Initialize HuggingFace embeddings
+embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+
+# Function to generate text from a prompt
+def generate_text(prompt):
+    # Ensure the prompt is not empty or too short
+    if not prompt or len(prompt.strip()) == 0:
+        raise ValueError("The input prompt is empty or too short.")
+
+    # Tokenize the input with truncation and padding
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, padding=True,
+                       max_length=tokenizer.model_max_length)
+
+    # Check if tokenized input is valid
+    if len(inputs["input_ids"]) == 0:
+        raise ValueError("The tokenized input is empty. Please check your input text.")
+
+    # Generate text from the input
+    try:
+        outputs = generator_model.generate(inputs["input_ids"], max_new_tokens=100)
+    except Exception as e:
+        raise ValueError(f"Error during text generation: {str(e)}")
+
+    # Ensure output is valid
+    if outputs.shape[1] == 0:
+        raise ValueError("Generated output is empty. Please check the generation parameters.")
+
+    # Decode the generated output
+    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return generated_text
+
+
+# Function to create FAISS index for document embeddings
+def create_faiss_index(document_embeddings):
+    try:
+        # Convert the embeddings to float32 (ensure proper format for FAISS)
+        document_embeddings = np.array(document_embeddings).astype('float32')
+
+        # Normalize embeddings before indexing (FAISS requires normalized embeddings for L2 search)
+        faiss.normalize_L2(document_embeddings)
+
+        # Initialize FAISS index (IndexFlatL2 for L2 distance search)
+        index = faiss.IndexFlatL2(document_embeddings.shape[1])
+
+        # Add document embeddings to the FAISS index
+        index.add(document_embeddings)
+
+        return index
+    except Exception as e:
+        raise ValueError(f"Error creating FAISS index: {str(e)}")
+
+class FAISSRetriever:
+    def __init__(self, faiss_index, embeddings_model):
+        self.index = faiss_index
+        self.embeddings_model = embeddings_model
+
+    def retrieve(self, query, top_k=1):
+        query_embedding = np.array(self.embeddings_model.embed([query])).astype('float32')
+
+        D, I = self.index.search(query_embedding, top_k)
+
+        return I
+
+
+def initialize_rag_chain():
+    try:
+        # Example document embeddings (replace with actual document embeddings)
+        document_embeddings = np.random.rand(10, 128)  # Example random document embeddings
+        index = create_faiss_index(document_embeddings)
+
+        # Create the custom retriever
+        retriever = FAISSRetriever(index, embedding_model)
+
+        # Initialize OpenAI LLM (using OpenAI as a generator here)
+        llm = OpenAI(temperature=0.7)
+
+        return retriever, llm
+    except Exception as e:
+        raise ValueError(f"Error initializing RAG chain: {str(e)}")
+
+
+# Main function to query and generate response
+def rag_chain(query):
+    try:
+        # Initialize RAG chain manually
+        retriever, llm = initialize_rag_chain()
+
+        # Retrieve relevant document(s) from FAISS index
+        relevant_document_indices = retriever.retrieve(query, top_k=1)
+
+        # For now, let's use the first document as a placeholder text (you can fetch actual text based on indices)
+        document_text = f"Document #{relevant_document_indices[0][0]}: This is an example document."
+
+        # Combine the query with the relevant document to generate the answer
+        prompt = f"Context: {document_text}\nQuestion: {query}\nAnswer:"
+
+        # Generate the response from OpenAI model
+        response = generate_text(prompt)
+        return response
+    except Exception as e:
+        raise ValueError(f"Error during RAG chain execution: {str(e)}")
+
+if __name__ == "__main__":
+    try:
+        query = "What is the main concern?"
+        response = rag_chain(query)
+        print(f"Response: {response}")
+    except Exception as e:
+        print(f"Error: {str(e)}")
