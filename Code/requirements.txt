@@ -6,7 +6,6 @@ sentence-transformers
 pandas
 streamlit
 groq
-re
 datetime
 wordcloud
 matplotlib
