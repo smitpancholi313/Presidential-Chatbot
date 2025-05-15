@@ -4,7 +4,6 @@ torch
 langchain
 sentence-transformers
 pandas
-os
 streamlit
 groq
 re
