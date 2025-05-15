@@ -10,3 +10,4 @@ groq
 datetime
 wordcloud
 matplotlib
+protobuf==3.20.*
