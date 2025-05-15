@@ -2,6 +2,7 @@ numpy
 transformers
 torch
 langchain
+langchain_chroma 
 sentence-transformers
 pandas
 streamlit
